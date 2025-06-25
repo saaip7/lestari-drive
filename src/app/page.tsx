@@ -18,6 +18,8 @@ import {
   Check,
   AlertCircle,
   Loader2,
+  Plus,
+  Menu,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,6 +67,8 @@ export default function GoogleDriveClone() {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
   const [showUploadProgress, setShowUploadProgress] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -176,6 +180,7 @@ export default function GoogleDriveClone() {
     setUploadProgress(initialProgress)
     setShowUploadProgress(true)
     setUploading(true)
+    setShowMobileMenu(false) // Close mobile menu
 
     try {
       // Upload files concurrently with a limit
@@ -225,6 +230,7 @@ export default function GoogleDriveClone() {
       if (!response.ok) throw new Error("Failed to create folder")
 
       setNewFolderName("")
+      setShowMobileMenu(false) // Close mobile menu
       await loadFiles()
     } catch (error) {
       console.error("Create folder error:", error)
@@ -233,12 +239,29 @@ export default function GoogleDriveClone() {
     }
   }
 
+  // const handleDeleteFile = async (fileId: string, fileName: string) => {
+  //   if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return
 
+  //   try {
+  //     const response = await fetch("/api/delete", {
+  //       method: "DELETE",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ fileId }),
+  //     })
+
+  //     if (!response.ok) throw new Error("Failed to delete file")
+
+  //     await loadFiles()
+  //   } catch (error) {
+  //     console.error("Delete error:", error)
+  //   }
+  // }
 
   const navigateToFolder = (folderId: string, folderName: string) => {
     setCurrentFolderId(folderId)
     setBreadcrumbs((prev) => [...prev, { id: folderId, name: folderName }])
     setSelectedFiles(new Set())
+    setShowSidebar(false) // Close sidebar on mobile
   }
 
   const navigateToBreadcrumb = (index: number) => {
@@ -246,6 +269,7 @@ export default function GoogleDriveClone() {
     setCurrentFolderId(targetBreadcrumb.id === "root" ? null : targetBreadcrumb.id)
     setBreadcrumbs(breadcrumbs.slice(0, index + 1))
     setSelectedFiles(new Set())
+    setShowSidebar(false) // Close sidebar on mobile
   }
 
   // const toggleFileSelection = (fileId: string) => {
@@ -333,24 +357,29 @@ export default function GoogleDriveClone() {
   return (
     <div className="h-screen flex flex-col bg-white">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
-        <div className="flex items-center gap-4">
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200">
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* Mobile Menu Button */}
+          <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setShowSidebar(!showSidebar)}>
+            <Menu className="w-5 h-5" />
+          </Button>
+
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Folder className="w-6 h-6 text-white" />
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Folder className="w-4 h-4 md:w-6 md:h-6 text-white" />
             </div>
-            <h1 className="text-xl font-medium text-gray-900">Drive</h1>
+            <h1 className="text-lg md:text-xl font-medium text-gray-900">Drive</h1>
           </div>
 
-          {/* Search */}
-          <div className="relative ml-8">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          {/* Search - Hidden on small mobile */}
+          <div className="relative ml-2 md:ml-8 hidden sm:block">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-gray-400" />
             <Input
               type="text"
               placeholder="Search in Drive"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 w-96 bg-gray-50 border-0 focus:bg-white focus:ring-1 focus:ring-blue-500"
+              className="pl-8 md:pl-10 w-48 md:w-96 bg-gray-50 border-0 focus:bg-white focus:ring-1 focus:ring-blue-500 text-sm"
             />
           </div>
         </div>
@@ -360,20 +389,39 @@ export default function GoogleDriveClone() {
             variant="ghost"
             size="sm"
             onClick={() => window.open("https://drive.google.com", "_blank")}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-blue-600 hover:text-blue-700 text-xs md:text-sm"
           >
-            Open Google Drive
+            <span className="hidden sm:inline">Open Google Drive</span>
+            <span className="sm:hidden">Open G-Drive</span>
           </Button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-64 border-r border-gray-200 bg-white">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Sidebar - Hidden on mobile, overlay on tablet */}
+        <aside
+          className={`
+          w-64 border-r border-gray-200 bg-white transition-transform duration-300 ease-in-out
+          md:relative md:translate-x-0
+          ${showSidebar ? "fixed inset-y-0 left-0 z-50 translate-x-0" : "fixed inset-y-0 left-0 z-50 -translate-x-full"}
+          md:block
+        `}
+        >
           <div className="p-4 space-y-2">
+            {/* Close button for mobile */}
+            <div className="flex justify-between items-center md:hidden mb-4">
+              <h2 className="font-medium text-gray-900">Menu</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowSidebar(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
             {/* New Folder Button */}
             <Button
-              onClick={() => setIsCreatingFolder(true)}
+              onClick={() => {
+                setIsCreatingFolder(true)
+                setShowSidebar(false)
+              }}
               className="w-full justify-start gap-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm"
             >
               <FolderPlus className="w-5 h-5" />
@@ -382,7 +430,10 @@ export default function GoogleDriveClone() {
 
             {/* Upload File Button */}
             <Button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                fileInputRef.current?.click()
+                setShowSidebar(false)
+              }}
               className="w-full justify-start gap-3 bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
             >
               <Upload className="w-5 h-5" />
@@ -457,62 +508,81 @@ export default function GoogleDriveClone() {
           )}
         </aside>
 
+        {/* Sidebar Overlay for mobile */}
+        {showSidebar && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" onClick={() => setShowSidebar(false)} />
+        )}
+
         {/* Main Content */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
+          <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200">
             {/* Breadcrumbs */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-1 min-w-0">
               {breadcrumbs.map((crumb, index) => (
-                <div key={crumb.id} className="flex items-center gap-1">
+                <div key={crumb.id} className="flex items-center gap-1 min-w-0">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => navigateToBreadcrumb(index)}
-                    className="text-gray-700 hover:bg-gray-100"
+                    className="text-gray-700 hover:bg-gray-100 text-xs md:text-sm px-2 md:px-3 truncate"
                   >
                     {crumb.name}
                   </Button>
-                  {index < breadcrumbs.length - 1 && <span className="text-gray-400">/</span>}
+                  {index < breadcrumbs.length - 1 && <span className="text-gray-400 text-xs md:text-sm">/</span>}
                 </div>
               ))}
             </div>
 
             {/* View Controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2 ml-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setViewMode("grid")}
-                className={viewMode === "grid" ? "bg-gray-100" : ""}
+                className={`${viewMode === "grid" ? "bg-gray-100" : ""} p-1 md:p-2`}
               >
-                <Grid3X3 className="w-5 h-5" />
+                <Grid3X3 className="w-4 h-4 md:w-5 md:h-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setViewMode("list")}
-                className={viewMode === "list" ? "bg-gray-100" : ""}
+                className={`${viewMode === "list" ? "bg-gray-100" : ""} p-1 md:p-2`}
               >
-                <List className="w-5 h-5" />
+                <List className="w-4 h-4 md:w-5 md:h-5" />
               </Button>
             </div>
           </div>
 
+          {/* Mobile Search Bar */}
+          <div className="px-4 py-2 border-b border-gray-200 sm:hidden">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search in Drive"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-gray-50 border-0 focus:bg-white focus:ring-1 focus:ring-blue-500 text-sm"
+              />
+            </div>
+          </div>
+
           {/* File Content */}
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-auto p-4 md:p-6">
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
               </div>
             ) : filteredFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <Folder className="w-16 h-16 mb-4 text-gray-300" />
-                <p className="text-lg font-medium">This folder is empty</p>
-                <p className="text-sm">Upload files or create folders to get started</p>
+                <Folder className="w-12 h-12 md:w-16 md:h-16 mb-4 text-gray-300" />
+                <p className="text-base md:text-lg font-medium">This folder is empty</p>
+                <p className="text-xs md:text-sm">Upload files or create folders to get started</p>
               </div>
             ) : viewMode === "grid" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 md:gap-4">
                 {filteredFiles.map((file) => (
                   <Card
                     key={file.id}
@@ -530,10 +600,10 @@ export default function GoogleDriveClone() {
                       }
                     }}
                   >
-                    <CardContent className="p-3">
+                    <CardContent className="p-2 md:p-3">
                       <div className="flex flex-col items-center text-center">
-                        <div className="mb-2">{getFileIcon(file)}</div>
-                        <p className="text-sm font-medium text-gray-900 truncate w-full" title={file.name}>
+                        <div className="mb-1 md:mb-2">{getFileIcon(file)}</div>
+                        <p className="text-xs md:text-sm font-medium text-gray-900 truncate w-full" title={file.name}>
                           {file.name}
                         </p>
                         {!file.isFolder && <p className="text-xs text-gray-500 mt-1">{formatFileSize(file.size)}</p>}
@@ -545,18 +615,18 @@ export default function GoogleDriveClone() {
             ) : (
               <div className="space-y-1">
                 {/* List Header */}
-                <div className="flex items-center px-4 py-2 text-sm font-medium text-gray-500 border-b border-gray-200">
+                <div className="flex items-center px-2 md:px-4 py-2 text-xs md:text-sm font-medium text-gray-500 border-b border-gray-200">
                   <div className="flex-1">Name</div>
-                  <div className="w-24 text-right">Size</div>
-                  <div className="w-32 text-right">Modified</div>
-                  <div className="w-12"></div>
+                  <div className="w-16 md:w-24 text-right hidden sm:block">Size</div>
+                  <div className="w-20 md:w-32 text-right hidden md:block">Modified</div>
+                  <div className="w-8 md:w-12"></div>
                 </div>
 
                 {/* List Items */}
                 {filteredFiles.map((file) => (
                   <div
                     key={file.id}
-                    className={`flex items-center px-4 py-2 hover:bg-gray-50 rounded cursor-pointer ${
+                    className={`flex items-center px-2 md:px-4 py-2 hover:bg-gray-50 rounded cursor-pointer ${
                       selectedFiles.has(file.id) ? "bg-blue-50" : ""
                     }`}
                     onClick={() => {
@@ -570,15 +640,17 @@ export default function GoogleDriveClone() {
                       }
                     }}
                   >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
                       {getFileIcon(file)}
-                      <span className="text-sm text-gray-900 truncate">{file.name}</span>
+                      <span className="text-xs md:text-sm text-gray-900 truncate">{file.name}</span>
                     </div>
-                    <div className="w-24 text-right text-sm text-gray-500">
+                    <div className="w-16 md:w-24 text-right text-xs md:text-sm text-gray-500 hidden sm:block">
                       {file.isFolder ? "" : formatFileSize(file.size)}
                     </div>
-                    <div className="w-32 text-right text-sm text-gray-500">{formatDate(file.modifiedTime)}</div>
-                    <div className="w-12 flex justify-end">
+                    <div className="w-20 md:w-32 text-right text-xs md:text-sm text-gray-500 hidden md:block">
+                      {formatDate(file.modifiedTime)}
+                    </div>
+                    <div className="w-8 md:w-12 flex justify-end">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -586,8 +658,9 @@ export default function GoogleDriveClone() {
                           e.stopPropagation()
                           // Show context menu
                         }}
+                        className="p-1"
                       >
-                        {/* <MoreVertical className="w-4 h-4" /> */}
+                        {/* <MoreVertical className="w-3 h-3 md:w-4 md:h-4" /> */}
                       </Button>
                     </div>
                   </div>
@@ -598,57 +671,107 @@ export default function GoogleDriveClone() {
         </main>
       </div>
 
-      {/* Upload Progress Panel */}
+      {/* Mobile Floating Action Button */}
+      <div className="fixed bottom-6 right-6 md:hidden z-30">
+        <div className="relative">
+          {/* FAB Menu */}
+          {showMobileMenu && (
+            <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-2 min-w-48">
+              <button
+                onClick={() => {
+                  setIsCreatingFolder(true)
+                  setShowMobileMenu(false)
+                }}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 w-full text-left"
+              >
+                <FolderPlus className="w-5 h-5 text-gray-600" />
+                <span className="text-sm text-gray-900">New Folder</span>
+              </button>
+              <button
+                onClick={() => {
+                  fileInputRef.current?.click()
+                  setShowMobileMenu(false)
+                }}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 w-full text-left"
+              >
+                <Upload className="w-5 h-5 text-gray-600" />
+                <span className="text-sm text-gray-900">Upload Files</span>
+              </button>
+            </div>
+          )}
+
+          {/* FAB Button */}
+          <Button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg"
+            size="sm"
+          >
+            <Plus className={`w-6 h-6 text-white transition-transform ${showMobileMenu ? "rotate-45" : ""}`} />
+          </Button>
+        </div>
+      </div>
+
+      {/* Mobile Menu Overlay */}
+      {showMobileMenu && <div className="fixed inset-0 z-20 md:hidden" onClick={() => setShowMobileMenu(false)} />}
+
+      {/* Upload Progress Panel - Mobile Responsive */}
       {showUploadProgress && (
-        <div className="fixed bottom-4 right-4 w-96 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 flex flex-col">
+        <div className="fixed bottom-4 right-4 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 sm:max-h-96 flex flex-col z-40">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200">
             <div className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-blue-600" />
-              <span className="font-medium text-gray-900">
+              <Upload className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
+              <span className="font-medium text-gray-900 text-sm md:text-base">
                 {uploading ? "Uploading" : "Upload complete"} ({completedUploads}/{totalUploads})
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               {completedUploads > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearCompletedUploads}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearCompletedUploads}
+                  className="text-xs md:text-sm px-2 md:px-3"
+                >
                   Clear
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={() => setShowUploadProgress(false)}>
-                <X className="w-4 h-4" />
+              <Button variant="ghost" size="sm" onClick={() => setShowUploadProgress(false)} className="p-1 md:p-2">
+                <X className="w-3 h-3 md:w-4 md:h-4" />
               </Button>
             </div>
           </div>
 
           {/* Overall Progress */}
           {uploading && (
-            <div className="p-4 border-b border-gray-200">
+            <div className="p-3 md:p-4 border-b border-gray-200">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">Overall progress</span>
-                <span className="text-sm text-gray-600">{Math.round(overallProgress)}%</span>
+                <span className="text-xs md:text-sm text-gray-600">Overall progress</span>
+                <span className="text-xs md:text-sm text-gray-600">{Math.round(overallProgress)}%</span>
               </div>
-              <Progress value={overallProgress} className="h-2" />
+              <Progress value={overallProgress} className="h-1.5 md:h-2" />
             </div>
           )}
 
           {/* Individual File Progress */}
           <div className="flex-1 overflow-auto">
             {uploadProgress.map((item) => (
-              <div key={item.id} className="p-4 border-b border-gray-100 last:border-b-0">
-                <div className="flex items-start gap-3">
+              <div key={item.id} className="p-3 md:p-4 border-b border-gray-100 last:border-b-0">
+                <div className="flex items-start gap-2 md:gap-3">
                   <div className="flex-shrink-0 mt-1">
-                    {item.status === "uploading" && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
-                    {item.status === "completed" && <Check className="w-4 h-4 text-green-600" />}
-                    {item.status === "error" && <AlertCircle className="w-4 h-4 text-red-600" />}
+                    {item.status === "uploading" && (
+                      <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin text-blue-600" />
+                    )}
+                    {item.status === "completed" && <Check className="w-3 h-3 md:w-4 md:h-4 text-green-600" />}
+                    {item.status === "error" && <AlertCircle className="w-3 h-3 md:w-4 md:h-4 text-red-600" />}
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-gray-900 truncate" title={item.file.name}>
+                      <p className="text-xs md:text-sm font-medium text-gray-900 truncate" title={item.file.name}>
                         {item.file.name}
                       </p>
-                      <span className="text-xs text-gray-500 ml-2">
+                      <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
                         {item.status === "uploading" && `${Math.round(item.progress)}%`}
                         {item.status === "completed" && "Done"}
                         {item.status === "error" && "Failed"}
@@ -659,11 +782,11 @@ export default function GoogleDriveClone() {
                       <>
                         <Progress value={item.progress} className="h-1 mb-2" />
                         <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span>
+                          <span className="truncate">
                             {formatFileSize(item.uploadedBytes)} of {formatFileSize(item.totalBytes)}
                           </span>
-                          <div className="flex items-center gap-2">
-                            {item.speed > 0 && <span>{formatSpeed(item.speed)}</span>}
+                          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2">
+                            {item.speed > 0 && <span className="hidden sm:inline">{formatSpeed(item.speed)}</span>}
                             {item.timeRemaining > 0 && <span>{formatTime(item.timeRemaining)} left</span>}
                           </div>
                         </div>
