@@ -3,7 +3,15 @@ import { Readable } from "stream"
 
 function getGoogleDriveClient() {
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
+  //const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
+
+  const privateKey_Encoded = process.env.GOOGLE_PRIVATE_KEY_ENCODED
+  if (!privateKey_Encoded) {
+    throw new Error("Google private key not configured")
+  }
+  const decodedPrivateKey = Buffer.from(privateKey_Encoded, "base64").toString("utf-8")
+  const privateKey = JSON.parse(decodedPrivateKey)
+
 
   if (!serviceAccountEmail || !privateKey) {
     throw new Error("Google service account credentials not configured")
