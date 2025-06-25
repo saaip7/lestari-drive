@@ -65,6 +65,7 @@ export default function GoogleDriveClone() {
   const [searchQuery, setSearchQuery] = useState("")
   const [newFolderName, setNewFolderName] = useState("")
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [createFolderLoading, setCreateFolderLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
   const [showUploadProgress, setShowUploadProgress] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
@@ -214,30 +215,31 @@ export default function GoogleDriveClone() {
   }
 
   const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return
+  if (!newFolderName.trim()) return;
 
-    setIsCreatingFolder(true)
-    try {
-      const response = await fetch("/api/create-folder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newFolderName.trim(),
-          parentId: currentFolderId,
-        }),
-      })
+  setCreateFolderLoading(true);
+  try {
+    const response = await fetch("/api/create-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newFolderName.trim(),
+        parentId: currentFolderId,
+      }),
+    });
 
-      if (!response.ok) throw new Error("Failed to create folder")
+    if (!response.ok) throw new Error("Failed to create folder");
 
-      setNewFolderName("")
-      setShowMobileMenu(false) // Close mobile menu
-      await loadFiles()
-    } catch (error) {
-      console.error("Create folder error:", error)
-    } finally {
-      setIsCreatingFolder(false)
-    }
+    setNewFolderName("");
+    setShowMobileMenu(false); // Close mobile menu
+    await loadFiles();
+  } catch (error) {
+    console.error("Create folder error:", error);
+  } finally {
+    setIsCreatingFolder(false);
+    setCreateFolderLoading(false);
   }
+};
 
   // const handleDeleteFile = async (fileId: string, fileName: string) => {
   //   if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return
@@ -489,8 +491,10 @@ export default function GoogleDriveClone() {
                   />
                 </div>
                 <div className="flex gap-2 mt-2">
-                  <Button size="sm" onClick={handleCreateFolder} disabled={!newFolderName.trim() || isCreatingFolder}>
-                    Create
+                  <Button size="sm" 
+                    onClick={handleCreateFolder} 
+                    disabled={!newFolderName.trim() || createFolderLoading}>
+                    {createFolderLoading ? "Creating..." : "Create"}
                   </Button>
                   <Button
                     size="sm"
