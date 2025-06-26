@@ -10,21 +10,17 @@ import {
   Video,
   FileText,
   FolderPlus,
-  Grid3X3,
+  Grid3x3,
   List,
   Search,
   Home,
   X,
-  Check,
-  AlertCircle,
-  Loader2,
   Plus,
   Menu,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 
 interface DriveFile {
   id: string
@@ -42,18 +38,6 @@ interface BreadcrumbItem {
   name: string
 }
 
-interface UploadProgress {
-  id: string
-  file: File
-  progress: number
-  status: "uploading" | "completed" | "error"
-  error?: string
-  uploadedBytes: number
-  totalBytes: number
-  speed: number
-  timeRemaining: number
-}
-
 export default function GoogleDriveClone() {
   const [files, setFiles] = useState<DriveFile[]>([])
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
@@ -65,9 +49,7 @@ export default function GoogleDriveClone() {
   const [searchQuery, setSearchQuery] = useState("")
   const [newFolderName, setNewFolderName] = useState("")
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
-  const [createFolderLoading, setCreateFolderLoading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
-  const [showUploadProgress, setShowUploadProgress] = useState(false)
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -96,113 +78,30 @@ export default function GoogleDriveClone() {
     }
   }
 
-  const uploadFileWithProgress = async (file: File, uploadId: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const formData = new FormData()
-      formData.append("file", file)
-      if (currentFolderId) {
-        formData.append("parentId", currentFolderId)
-      }
-
-      const xhr = new XMLHttpRequest()
-      const startTime = Date.now()
-
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) {
-          const progress = (event.loaded / event.total) * 100
-          const elapsed = Date.now() - startTime
-          const speed = event.loaded / (elapsed / 1000) // bytes per second
-          const timeRemaining = speed > 0 ? (event.total - event.loaded) / speed : 0
-
-          setUploadProgress((prev) =>
-            prev.map((item) =>
-              item.id === uploadId
-                ? {
-                    ...item,
-                    progress,
-                    uploadedBytes: event.loaded,
-                    speed,
-                    timeRemaining,
-                  }
-                : item,
-            ),
-          )
-        }
-      })
-
-      xhr.addEventListener("load", () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setUploadProgress((prev) =>
-            prev.map((item) =>
-              item.id === uploadId ? { ...item, status: "completed" as const, progress: 100 } : item,
-            ),
-          )
-          resolve()
-        } else {
-          setUploadProgress((prev) =>
-            prev.map((item) =>
-              item.id === uploadId ? { ...item, status: "error" as const, error: "Upload failed" } : item,
-            ),
-          )
-          reject(new Error("Upload failed"))
-        }
-      })
-
-      xhr.addEventListener("error", () => {
-        setUploadProgress((prev) =>
-          prev.map((item) =>
-            item.id === uploadId ? { ...item, status: "error" as const, error: "Network error" } : item,
-          ),
-        )
-        reject(new Error("Network error"))
-      })
-
-      xhr.open("POST", "/api/upload")
-      xhr.send(formData)
-    })
-  }
-
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = event.target.files
     if (!selectedFiles) return
 
-    const filesToUpload = Array.from(selectedFiles)
-    const initialProgress: UploadProgress[] = filesToUpload.map((file) => ({
-      id: `${file.name}-${Date.now()}-${Math.random()}`,
-      file,
-      progress: 0,
-      status: "uploading" as const,
-      uploadedBytes: 0,
-      totalBytes: file.size,
-      speed: 0,
-      timeRemaining: 0,
-    }))
-
-    setUploadProgress(initialProgress)
-    setShowUploadProgress(true)
     setUploading(true)
     setShowMobileMenu(false) // Close mobile menu
-
     try {
-      // Upload files concurrently with a limit
-      const concurrentLimit = 3
-      const uploadPromises: Promise<void>[] = []
+      for (const file of Array.from(selectedFiles)) {
+        const formData = new FormData()
+        formData.append("file", file)
+        if (currentFolderId) {
+          formData.append("parentId", currentFolderId)
+        }
 
-      for (let i = 0; i < filesToUpload.length; i += concurrentLimit) {
-        const batch = filesToUpload.slice(i, i + concurrentLimit)
-        const batchPromises = batch.map((file, index) => {
-          const uploadId = initialProgress[i + index].id
-          return uploadFileWithProgress(file, uploadId)
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
         })
-        uploadPromises.push(...batchPromises)
 
-        // Wait for current batch to complete before starting next batch
-        if (i + concurrentLimit < filesToUpload.length) {
-          await Promise.allSettled(batchPromises)
+        if (!response.ok) {
+          throw new Error(`Failed to upload ${file.name}`)
         }
       }
 
-      await Promise.allSettled(uploadPromises)
       await loadFiles()
     } catch (error) {
       console.error("Upload error:", error)
@@ -215,49 +114,43 @@ export default function GoogleDriveClone() {
   }
 
   const handleCreateFolder = async () => {
-  if (!newFolderName.trim()) return;
+    if (!newFolderName.trim()) return
 
-  setCreateFolderLoading(true);
-  try {
-    const response = await fetch("/api/create-folder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newFolderName.trim(),
-        parentId: currentFolderId,
-      }),
-    });
+    setIsCreatingFolder(true)
+    try {
+      const response = await fetch("/api/create-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newFolderName.trim(),
+          parentId: currentFolderId,
+        }),
+      })
 
-    if (!response.ok) throw new Error("Failed to create folder");
+      if (!response.ok) throw new Error("Failed to create folder")
 
-    setNewFolderName("");
-    setShowMobileMenu(false); // Close mobile menu
-    await loadFiles();
-  } catch (error) {
-    console.error("Create folder error:", error);
-  } finally {
-    setIsCreatingFolder(false);
-    setCreateFolderLoading(false);
+      setNewFolderName("")
+      setShowCreateFolderModal(false)
+      setShowMobileMenu(false) // Close mobile menu
+      await loadFiles()
+    } catch (error) {
+      console.error("Create folder error:", error)
+    } finally {
+      setIsCreatingFolder(false)
+    }
   }
-};
 
-  // const handleDeleteFile = async (fileId: string, fileName: string) => {
-  //   if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return
+  const openCreateFolderModal = () => {
+    setShowCreateFolderModal(true)
+    setShowMobileMenu(false) // Close mobile menu if open
+    setShowSidebar(false) // Close sidebar on mobile
+  }
 
-  //   try {
-  //     const response = await fetch("/api/delete", {
-  //       method: "DELETE",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ fileId }),
-  //     })
-
-  //     if (!response.ok) throw new Error("Failed to delete file")
-
-  //     await loadFiles()
-  //   } catch (error) {
-  //     console.error("Delete error:", error)
-  //   }
-  // }
+  const closeCreateFolderModal = () => {
+    setShowCreateFolderModal(false)
+    setNewFolderName("")
+    setIsCreatingFolder(false)
+  }
 
   const navigateToFolder = (folderId: string, folderName: string) => {
     setCurrentFolderId(folderId)
@@ -273,16 +166,6 @@ export default function GoogleDriveClone() {
     setSelectedFiles(new Set())
     setShowSidebar(false) // Close sidebar on mobile
   }
-
-  // const toggleFileSelection = (fileId: string) => {
-  //   const newSelection = new Set(selectedFiles)
-  //   if (newSelection.has(fileId)) {
-  //     newSelection.delete(fileId)
-  //   } else {
-  //     newSelection.add(fileId)
-  //   }
-  //   setSelectedFiles(newSelection)
-  // }
 
   const getFileIcon = (file: DriveFile) => {
     if (file.isFolder) {
@@ -313,19 +196,6 @@ export default function GoogleDriveClone() {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
   }
 
-  const formatSpeed = (bytesPerSecond: number) => {
-    const k = 1024
-    const sizes = ["B/s", "KB/s", "MB/s", "GB/s"]
-    const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
-    return Number.parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
-  }
-
-  const formatTime = (seconds: number) => {
-    if (seconds < 60) return `${Math.round(seconds)}s`
-    if (seconds < 3600) return `${Math.round(seconds / 60)}m`
-    return `${Math.round(seconds / 3600)}h`
-  }
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     const now = new Date()
@@ -345,17 +215,6 @@ export default function GoogleDriveClone() {
 
   const filteredFiles = files.filter((file) => file.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
-  const completedUploads = uploadProgress.filter((item) => item.status === "completed").length
-  const totalUploads = uploadProgress.length
-  const overallProgress = totalUploads > 0 ? (completedUploads / totalUploads) * 100 : 0
-
-  const clearCompletedUploads = () => {
-    setUploadProgress((prev) => prev.filter((item) => item.status !== "completed"))
-    if (uploadProgress.every((item) => item.status === "completed")) {
-      setShowUploadProgress(false)
-    }
-  }
-
   return (
     <div className="h-screen flex flex-col bg-white">
       {/* Header */}
@@ -370,7 +229,7 @@ export default function GoogleDriveClone() {
             <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
               <Folder className="w-4 h-4 md:w-6 md:h-6 text-white" />
             </div>
-            <h1 className="text-lg md:text-xl font-medium text-gray-900">Drive</h1>
+            <h1 className="text-lg md:text-xl font-medium text-gray-900">Lestari Drive</h1>
           </div>
 
           {/* Search - Hidden on small mobile */}
@@ -390,11 +249,13 @@ export default function GoogleDriveClone() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => window.open("https://drive.google.com", "_blank")}
+            onClick={() =>
+              window.open("https://drive.google.com/drive/folders/1zqk5-rYAqBqw6W71-QGfPpiTl5ldUOGs", "_blank")
+            }
             className="text-blue-600 hover:text-blue-700 text-xs md:text-sm"
           >
             <span className="hidden sm:inline">Open Google Drive</span>
-            <span className="sm:hidden">Open G-Drive</span>
+            <span className="sm:hidden">Drive</span>
           </Button>
         </div>
       </header>
@@ -420,10 +281,7 @@ export default function GoogleDriveClone() {
 
             {/* New Folder Button */}
             <Button
-              onClick={() => {
-                setIsCreatingFolder(true)
-                setShowSidebar(false)
-              }}
+              onClick={openCreateFolderModal}
               className="w-full justify-start gap-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 shadow-sm"
             >
               <FolderPlus className="w-5 h-5" />
@@ -465,56 +323,11 @@ export default function GoogleDriveClone() {
               </Button>
             </div>
           </nav>
-
-          {/* New Folder Input */}
-          {isCreatingFolder && (
-            <div className="px-4 pb-4">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <FolderPlus className="w-4 h-4 text-gray-600" />
-                  <Input
-                    type="text"
-                    placeholder="Folder name"
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleCreateFolder()
-                      }
-                      if (e.key === "Escape") {
-                        setIsCreatingFolder(false)
-                        setNewFolderName("")
-                      }
-                    }}
-                    className="flex-1"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <Button size="sm" 
-                    onClick={handleCreateFolder} 
-                    disabled={!newFolderName.trim() || createFolderLoading}>
-                    {createFolderLoading ? "Creating..." : "Create"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setIsCreatingFolder(false)
-                      setNewFolderName("")
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
         </aside>
 
         {/* Sidebar Overlay for mobile */}
         {showSidebar && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" onClick={() => setShowSidebar(false)} />
+          <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setShowSidebar(false)} />
         )}
 
         {/* Main Content */}
@@ -546,7 +359,7 @@ export default function GoogleDriveClone() {
                 onClick={() => setViewMode("grid")}
                 className={`${viewMode === "grid" ? "bg-gray-100" : ""} p-1 md:p-2`}
               >
-                <Grid3X3 className="w-4 h-4 md:w-5 md:h-5" />
+                <Grid3x3 className="w-4 h-4 md:w-5 md:h-5" />
               </Button>
               <Button
                 variant="ghost"
@@ -682,10 +495,7 @@ export default function GoogleDriveClone() {
           {showMobileMenu && (
             <div className="absolute bottom-16 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-2 min-w-48">
               <button
-                onClick={() => {
-                  setIsCreatingFolder(true)
-                  setShowMobileMenu(false)
-                }}
+                onClick={openCreateFolderModal}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 w-full text-left"
               >
                 <FolderPlus className="w-5 h-5 text-gray-600" />
@@ -718,94 +528,82 @@ export default function GoogleDriveClone() {
       {/* Mobile Menu Overlay */}
       {showMobileMenu && <div className="fixed inset-0 z-20 md:hidden" onClick={() => setShowMobileMenu(false)} />}
 
-      {/* Upload Progress Panel - Mobile Responsive */}
-      {showUploadProgress && (
-        <div className="fixed bottom-4 right-4 w-80 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 sm:max-h-96 flex flex-col z-40">
-          {/* Header */}
-          <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <Upload className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
-              <span className="font-medium text-gray-900 text-sm md:text-base">
-                {uploading ? "Uploading" : "Upload complete"} ({completedUploads}/{totalUploads})
-              </span>
+      {/* Create Folder Modal */}
+      {showCreateFolderModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Create New Folder</h2>
+              <Button variant="ghost" size="sm" onClick={closeCreateFolderModal}>
+                <X className="w-4 h-4" />
+              </Button>
             </div>
-            <div className="flex items-center gap-1 md:gap-2">
-              {completedUploads > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearCompletedUploads}
-                  className="text-xs md:text-sm px-2 md:px-3"
-                >
-                  Clear
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={() => setShowUploadProgress(false)} className="p-1 md:p-2">
-                <X className="w-3 h-3 md:w-4 md:h-4" />
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="folderName" className="block text-sm font-medium text-gray-700 mb-2">
+                    Folder name
+                  </label>
+                  <Input
+                    id="folderName"
+                    type="text"
+                    placeholder="Enter folder name"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleCreateFolder()
+                      }
+                      if (e.key === "Escape") {
+                        closeCreateFolderModal()
+                      }
+                    }}
+                    className="w-full"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Current Location */}
+                <div className="text-sm text-gray-500">
+                  <span>Location: </span>
+                  <span className="font-medium">
+                    {breadcrumbs.map((crumb, index) => (
+                      <span key={crumb.id}>
+                        {crumb.name}
+                        {index < breadcrumbs.length - 1 && " / "}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+              <Button variant="ghost" onClick={closeCreateFolderModal} disabled={isCreatingFolder}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim() || isCreatingFolder}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isCreatingFolder ? "Creating..." : "Create"}
               </Button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Overall Progress */}
-          {uploading && (
-            <div className="p-3 md:p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs md:text-sm text-gray-600">Overall progress</span>
-                <span className="text-xs md:text-sm text-gray-600">{Math.round(overallProgress)}%</span>
-              </div>
-              <Progress value={overallProgress} className="h-1.5 md:h-2" />
-            </div>
-          )}
-
-          {/* Individual File Progress */}
-          <div className="flex-1 overflow-auto">
-            {uploadProgress.map((item) => (
-              <div key={item.id} className="p-3 md:p-4 border-b border-gray-100 last:border-b-0">
-                <div className="flex items-start gap-2 md:gap-3">
-                  <div className="flex-shrink-0 mt-1">
-                    {item.status === "uploading" && (
-                      <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin text-blue-600" />
-                    )}
-                    {item.status === "completed" && <Check className="w-3 h-3 md:w-4 md:h-4 text-green-600" />}
-                    {item.status === "error" && <AlertCircle className="w-3 h-3 md:w-4 md:h-4 text-red-600" />}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs md:text-sm font-medium text-gray-900 truncate" title={item.file.name}>
-                        {item.file.name}
-                      </p>
-                      <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
-                        {item.status === "uploading" && `${Math.round(item.progress)}%`}
-                        {item.status === "completed" && "Done"}
-                        {item.status === "error" && "Failed"}
-                      </span>
-                    </div>
-
-                    {item.status === "uploading" && (
-                      <>
-                        <Progress value={item.progress} className="h-1 mb-2" />
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span className="truncate">
-                            {formatFileSize(item.uploadedBytes)} of {formatFileSize(item.totalBytes)}
-                          </span>
-                          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2">
-                            {item.speed > 0 && <span className="hidden sm:inline">{formatSpeed(item.speed)}</span>}
-                            {item.timeRemaining > 0 && <span>{formatTime(item.timeRemaining)} left</span>}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {item.status === "completed" && (
-                      <p className="text-xs text-green-600">{formatFileSize(item.totalBytes)} uploaded</p>
-                    )}
-
-                    {item.status === "error" && <p className="text-xs text-red-600">{item.error || "Upload failed"}</p>}
-                  </div>
-                </div>
-              </div>
-            ))}
+      {/* Upload Progress */}
+      {uploading && (
+        <div className="fixed bottom-4 right-4 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-40">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+            <span className="text-sm text-gray-700">Uploading files...</span>
           </div>
         </div>
       )}
